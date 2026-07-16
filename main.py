@@ -16,7 +16,6 @@ if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # 初始化 SQLAlchemy 連線
-# 若為 SQLite，需額外加上 connect_args={'check_same_thread': False}
 connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 engine = create_engine(DATABASE_URL, connect_args=connect_args)
 
@@ -35,7 +34,7 @@ class BookDB(Base):
 # 自動建立資料表
 Base.metadata.create_all(bind=engine)
 
-# 定義 Pydantic 資料驗證格式
+# 定義 Pydantic 資料驗證格式 (與老師畫面中的 Schema 一致)
 class BookBase(BaseModel):
     title: str
     author: str
@@ -44,14 +43,17 @@ class BookBase(BaseModel):
 class BookCreate(BookBase):
     pass
 
+class BookUpdate(BookBase):
+    pass
+
 class BookResponse(BookBase):
     id: int
     
     class Config:
         from_attributes = True
 
-# 初始化 FastAPI 應用程式
-app = FastAPI(title="Book CRUD API")
+# 初始化 FastAPI
+app = FastAPI(title="FastAPI")
 
 # 取得資料庫連接的 Dependency
 def get_db():
@@ -61,17 +63,24 @@ def get_db():
     finally:
         db.close()
 
-# 路由 1：首頁問候語
+# 路由 1：GET / (Read Root)
 @app.get("/")
 def read_root():
     return {"message": "Hello"}
 
-# 路由 2：Hello 端點 (簡報中的 GET /Hello)
-@app.get("/Hello")
-def say_hello():
+# 路由 2：GET /hello (Read Hello)
+@app.get("/hello")
+def read_hello():
     return {"message": "Hello"}
 
-# 路由 3：新增書籍 (POST /books)
+# 路由 3：GET /api (Read Api)
+@app.get("/api")
+def read_api(name: str = None):
+    if name:
+        return {"message": f"Hello {name}"}
+    return {"message": "Hello from API"}
+
+# 路由 4：POST /books (Create Book)
 @app.post("/books", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
 def create_book(book: BookCreate, db: Session = Depends(get_db)):
     db_book = BookDB(title=book.title, author=book.author, published_year=book.published_year)
@@ -80,22 +89,22 @@ def create_book(book: BookCreate, db: Session = Depends(get_db)):
     db.refresh(db_book)
     return db_book
 
-# 路由 4：取得所有書籍列表 (GET /books)
+# 路由 5：GET /books (Read Books)
 @app.get("/books", response_model=list[BookResponse])
-def list_books(db: Session = Depends(get_db)):
+def read_books(db: Session = Depends(get_db)):
     return db.query(BookDB).all()
 
-# 路由 5：取得單一書籍資訊 (GET /books/{book_id})
+# 路由 6：GET /books/{book_id} (Read Book)
 @app.get("/books/{book_id}", response_model=BookResponse)
-def get_book(book_id: int, db: Session = Depends(get_db)):
+def read_book(book_id: int, db: Session = Depends(get_db)):
     db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
     return db_book
 
-# 路由 6：修改書籍資訊 (PUT /books/{book_id})
+# 路由 7：PUT /books/{book_id} (Update Book)
 @app.put("/books/{book_id}", response_model=BookResponse)
-def update_book(book_id: int, updated_book: BookCreate, db: Session = Depends(get_db)):
+def update_book(book_id: int, updated_book: BookUpdate, db: Session = Depends(get_db)):
     db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -106,7 +115,7 @@ def update_book(book_id: int, updated_book: BookCreate, db: Session = Depends(ge
     db.refresh(db_book)
     return db_book
 
-# 路由 7：刪除書籍 (DELETE /books/{book_id})
+# 路由 8：DELETE /books/{book_id} (Delete Book)
 @app.delete("/books/{book_id}")
 def delete_book(book_id: int, db: Session = Depends(get_db)):
     db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
