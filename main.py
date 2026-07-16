@@ -1,6 +1,7 @@
 import os
+from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, status
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from pydantic import BaseModel
@@ -29,22 +30,28 @@ class BookDB(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     author = Column(String, nullable=False)
-    published_year = Column(Integer, nullable=False)
+    description = Column(Text, nullable=True)          # 簡報截圖中的 description 欄位 (可為 null)
+    published_year = Column(Integer, nullable=True)      # 簡報截圖中的 published_year 欄位 (可為 null)
 
 # 自動建立資料表
 Base.metadata.create_all(bind=engine)
 
-# 定義 Pydantic 資料驗證格式 (與老師畫面中的 Schema 一致)
+# 定義 Pydantic 資料驗證格式 (與老師最新截圖 Schema 欄位完全對齊)
 class BookBase(BaseModel):
     title: str
     author: str
-    published_year: int
+    description: Optional[str] = None
+    published_year: Optional[int] = None
 
 class BookCreate(BookBase):
     pass
 
-class BookUpdate(BookBase):
-    pass
+# Update 時所有欄位皆為選填 (Optional)
+class BookUpdate(BaseModel):
+    title: Optional[str] = None
+    author: Optional[str] = None
+    description: Optional[str] = None
+    published_year: Optional[int] = None
 
 class BookResponse(BookBase):
     id: int
@@ -83,7 +90,12 @@ def read_api(name: str = None):
 # 路由 4：POST /books (Create Book)
 @app.post("/books", response_model=BookResponse, status_code=status.HTTP_201_CREATED)
 def create_book(book: BookCreate, db: Session = Depends(get_db)):
-    db_book = BookDB(title=book.title, author=book.author, published_year=book.published_year)
+    db_book = BookDB(
+        title=book.title, 
+        author=book.author, 
+        description=book.description,
+        published_year=book.published_year
+    )
     db.add(db_book)
     db.commit()
     db.refresh(db_book)
@@ -108,9 +120,17 @@ def update_book(book_id: int, updated_book: BookUpdate, db: Session = Depends(ge
     db_book = db.query(BookDB).filter(BookDB.id == book_id).first()
     if not db_book:
         raise HTTPException(status_code=404, detail="Book not found")
-    db_book.title = updated_book.title
-    db_book.author = updated_book.author
-    db_book.published_year = updated_book.published_year
+    
+    # 僅更新有傳入的欄位，其餘保留原樣
+    if updated_book.title is not None:
+        db_book.title = updated_book.title
+    if updated_book.author is not None:
+        db_book.author = updated_book.author
+    if updated_book.description is not None:
+        db_book.description = updated_book.description
+    if updated_book.published_year is not None:
+        db_book.published_year = updated_book.published_year
+        
     db.commit()
     db.refresh(db_book)
     return db_book
