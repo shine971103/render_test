@@ -103,8 +103,18 @@ def create_book(book: BookCreate, db: Session = Depends(get_db)):
 
 # 路由 5：GET /books (Read Books)
 @app.get("/books", response_model=list[BookResponse])
-def read_books(db: Session = Depends(get_db)):
-    return db.query(BookDB).all()
+def read_books(
+    author: Optional[str] = None,
+    title: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    query = db.query(BookDB)
+    if author:
+        query = query.filter(BookDB.author == author)
+    if title:
+        query = query.filter(BookDB.title == title)
+    return query.all()
+
 
 # 路由 6：GET /books/{book_id} (Read Book)
 @app.get("/books/{book_id}", response_model=BookResponse)
